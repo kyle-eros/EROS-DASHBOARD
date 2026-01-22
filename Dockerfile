@@ -13,6 +13,7 @@ WORKDIR /app
 
 # Install dependencies using pnpm
 COPY package.json pnpm-lock.yaml* ./
+COPY prisma ./prisma
 RUN corepack enable pnpm && pnpm i --frozen-lockfile
 
 # Rebuild the source code only when needed
