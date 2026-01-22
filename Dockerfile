@@ -45,6 +45,7 @@ COPY --from=builder /app/public ./public
 COPY scripts ./scripts
 
 RUN npm install -g tsx
+RUN npm install -g prisma@5.10.2
 
 # Set the correct permission for prerender cache
 RUN mkdir .next
