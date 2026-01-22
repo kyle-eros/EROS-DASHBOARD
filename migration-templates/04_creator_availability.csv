@@ -1,0 +1,10 @@
+creator_stage_name,day_of_week,start_time,end_time,is_recurring,specific_date,is_available,reason
+StarPerformer,1,09:00,17:00,true,,true,
+StarPerformer,2,09:00,17:00,true,,true,
+StarPerformer,3,09:00,17:00,true,,true,
+StarPerformer,4,09:00,17:00,true,,true,
+StarPerformer,5,09:00,17:00,true,,true,
+StarPerformer,,,,false,2025-02-14,false,Valentine's Day - Personal
+MoonlightBabe,0,18:00,23:00,true,,true,
+MoonlightBabe,1,18:00,23:00,true,,true,
+MoonlightBabe,2,18:00,23:00,true,,true,

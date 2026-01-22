@@ -1,0 +1,4 @@
+user_email,stage_name,platforms,timezone,is_active
+creator1@example.com,StarPerformer,"onlyfans,fansly",America/New_York,true
+creator2@example.com,MoonlightBabe,"onlyfans,chaturbate,instagram",America/Los_Angeles,true
+creator3@example.com,SunshineQueen,"onlyfans",America/Chicago,true

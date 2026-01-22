@@ -1,0 +1,392 @@
+// ============================================================================
+// EROS Ticketing System - Prisma Schema
+// ============================================================================
+// Project: EROS_OPTIMAL - Agency Ticketing System for Content Creator Operations
+// Database: PostgreSQL 16
+// Prisma Version: 6.x
+//
+// MANTRA: "KEEP EVERYTHING ROBUST, FOCUSED, & SIMPLE!"
+//
+// Schema Overview:
+// - 10 Models: User, Creator, Ticket, TicketHistory, TicketComment,
+//              UserCreatorAssignment, CreatorAvailability, Notification,
+//              SystemSetting, AuditLog
+// - 6 Enums: UserRole, TicketType, TicketStatus, TicketPriority, NotificationType
+// - All IDs are UUIDs for distributed-system compatibility
+// - Complete audit trail for compliance and debugging
+// - JSONB fields for flexible, type-specific data storage
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+/// User roles defining access levels and permissions in the system
+enum UserRole {
+  SUPER_ADMIN /// Full system access, user management, system configuration
+  MANAGER /// All tickets, assignments, reporting, team oversight
+  SCHEDULER /// Content scheduling, creator management, availability
+  CHATTER /// Submit requests for assigned creators only
+  CREATOR /// View and respond to own assigned tickets only
+}
+
+/// Types of tickets that can be created in the system
+enum TicketType {
+  CUSTOM_VIDEO /// Custom video requests from fans (chatter -> creator)
+  VIDEO_CALL /// Scheduled video call requests
+  CONTENT_REQUEST /// Content scheduling and production requests
+  GENERAL_INQUIRY /// General questions, feedback, or miscellaneous requests
+  URGENT_ALERT /// High-priority urgent matters requiring immediate attention
+}
+
+/// Workflow states for ticket lifecycle management
+enum TicketStatus {
+  DRAFT /// Created but not yet submitted for review
+  SUBMITTED /// Submitted and awaiting review/assignment
+  PENDING_REVIEW /// Under manager or assignee review
+  ACCEPTED /// Creator accepted the request, work to begin
+  IN_PROGRESS /// Actively being worked on
+  COMPLETED /// Successfully finished and closed
+  REJECTED /// Denied with reason (terminal state)
+  CANCELLED /// Cancelled by requester (terminal state)
+}
+
+/// Priority levels for ticket urgency classification
+enum TicketPriority {
+  LOW /// Can be addressed when convenient
+  MEDIUM /// Standard priority, normal SLA
+  HIGH /// Elevated priority, faster response needed
+  URGENT /// Critical priority, immediate attention required
+}
+
+/// Types of notifications sent to users
+enum NotificationType {
+  TICKET_CREATED /// New ticket has been created
+  TICKET_ASSIGNED /// Ticket has been assigned to user
+  TICKET_STATUS_CHANGED /// Ticket status has been updated
+  TICKET_COMMENTED /// New comment added to ticket
+  DEADLINE_APPROACHING /// Ticket deadline is approaching
+  SYSTEM_ANNOUNCEMENT /// System-wide announcement or alert
+}
+
+// ============================================================================
+// MODELS
+// ============================================================================
+
+/// User - Staff members and creators who interact with the ticketing system
+/// Supports multiple roles: Super Admin, Manager, Scheduler, Chatter, Creator
+model User {
+  id           String    @id @default(uuid()) @db.Uuid
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  name         String
+  role         UserRole
+  isActive     Boolean   @default(true) @map("is_active")
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  /// Optional 1:1 relation - only users with CREATOR role have a creator profile
+  creatorProfile     Creator?                @relation("UserCreatorProfile")
+  /// Tickets created by this user
+  createdTickets     Ticket[]                @relation("TicketCreatedBy")
+  /// Tickets assigned to this user for handling
+  assignedTickets    Ticket[]                @relation("TicketAssignedTo")
+  /// Comments made by this user on tickets
+  comments           TicketComment[]         @relation("CommentAuthor")
+  /// History entries created by this user (status changes, etc.)
+  historyEntries     TicketHistory[]         @relation("HistoryChangedBy")
+  /// Notifications for this user
+  notifications      Notification[]          @relation("UserNotifications")
+  /// Creator assignments - which creators this user manages/works with
+  creatorAssignments UserCreatorAssignment[] @relation("UserAssignments")
+
+  @@index([email])
+  @@index([role])
+  @@index([isActive])
+  @@map("users")
+}
+
+/// Creator - Content creator profiles with platform presence and preferences
+/// Linked 1:1 with a User account that has CREATOR role
+model Creator {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @unique @map("user_id") @db.Uuid
+  stageName   String   @map("stage_name")
+  /// Array of platform names: ["onlyfans", "fansly", "instagram", etc.]
+  platforms   String[]
+  /// IANA timezone identifier for scheduling (e.g., "America/New_York")
+  timezone    String   @default("America/New_York")
+  /// Flexible JSON for creator-specific settings and preferences
+  preferences Json?
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  /// 1:1 link to User account
+  user         User                    @relation("UserCreatorProfile", fields: [userId], references: [id], onDelete: Cascade)
+  /// Tickets that are FOR this creator (requests to fulfill)
+  tickets      Ticket[]                @relation("TicketForCreator")
+  /// Availability schedule entries
+  availability CreatorAvailability[]   @relation("CreatorAvailabilitySlots")
+  /// Users assigned to work with this creator
+  assignments  UserCreatorAssignment[] @relation("CreatorAssignments")
+
+  @@index([stageName])
+  @@index([isActive])
+  @@map("creators")
+}
+
+/// Ticket - Core entity for all requests in the ticketing system
+/// Supports multiple ticket types with flexible JSON data storage
+model Ticket {
+  id              String         @id @default(uuid()) @db.Uuid
+  /// Human-readable ticket number: "CVR-2025-00001" (CVR=Custom Video Request)
+  ticketNumber    String         @unique @map("ticket_number")
+  type            TicketType
+  status          TicketStatus   @default(DRAFT)
+  priority        TicketPriority @default(MEDIUM)
+  title           String
+  description     String?
+  /// Flexible JSON for type-specific request data (video specs, call details, etc.)
+  ticketData      Json           @map("ticket_data")
+  /// Creator's response data (pricing, availability, completion notes, etc.)
+  responseData    Json?          @map("response_data")
+  /// Reason for rejection if status is REJECTED
+  rejectionReason String?        @map("rejection_reason")
+  /// Optional deadline for ticket completion
+  deadline        DateTime?
+  /// Timestamp when ticket was first submitted (moved from DRAFT to SUBMITTED)
+  submittedAt     DateTime?      @map("submitted_at")
+  /// Timestamp when ticket reached COMPLETED status
+  completedAt     DateTime?      @map("completed_at")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  // Foreign Keys
+  /// Which creator this ticket is for
+  creatorId    String  @map("creator_id") @db.Uuid
+  /// Who created this ticket
+  createdById  String  @map("created_by_id") @db.Uuid
+  /// Who is assigned to handle this ticket (optional)
+  assignedToId String? @map("assigned_to_id") @db.Uuid
+
+  // Relations
+  creator    Creator         @relation("TicketForCreator", fields: [creatorId], references: [id], onDelete: Restrict)
+  createdBy  User            @relation("TicketCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  assignedTo User?           @relation("TicketAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  history    TicketHistory[] @relation("TicketHistoryEntries")
+  comments   TicketComment[] @relation("TicketComments")
+
+  // Indexes for common query patterns
+  @@index([ticketNumber])
+  @@index([type])
+  @@index([status])
+  @@index([priority])
+  @@index([creatorId])
+  @@index([createdById])
+  @@index([assignedToId])
+  @@index([deadline])
+  @@index([createdAt(sort: Desc)])
+  @@index([submittedAt])
+  @@index([completedAt])
+  // Composite indexes for dashboard queries
+  @@index([status, creatorId])
+  @@index([status, assignedToId])
+  @@index([status, priority])
+  @@index([type, status])
+  @@map("tickets")
+}
+
+/// TicketHistory - Immutable audit log for ticket state changes
+/// Records every status change and data modification for compliance
+model TicketHistory {
+  id             String        @id @default(uuid()) @db.Uuid
+  ticketId       String        @map("ticket_id") @db.Uuid
+  /// Previous status before change (null for initial creation)
+  previousStatus TicketStatus? @map("previous_status")
+  /// New status after change
+  newStatus      TicketStatus  @map("new_status")
+  /// Snapshot of previous data state (for audit trail)
+  previousData   Json?         @map("previous_data")
+  /// Snapshot of new data state
+  newData        Json?         @map("new_data")
+  /// Who made this change
+  changedById    String        @map("changed_by_id") @db.Uuid
+  /// Optional reason/notes for the change
+  changeReason   String?       @map("change_reason")
+  /// Immutable timestamp - no updatedAt as this is append-only
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  // Relations
+  ticket    Ticket @relation("TicketHistoryEntries", fields: [ticketId], references: [id], onDelete: Cascade)
+  changedBy User   @relation("HistoryChangedBy", fields: [changedById], references: [id], onDelete: Restrict)
+
+  @@index([ticketId])
+  @@index([changedById])
+  @@index([createdAt(sort: Desc)])
+  @@index([newStatus])
+  @@map("ticket_history")
+}
+
+/// TicketComment - Discussion and notes on tickets
+/// Supports both internal (staff-only) and external (visible to creator) comments
+model TicketComment {
+  id         String   @id @default(uuid()) @db.Uuid
+  ticketId   String   @map("ticket_id") @db.Uuid
+  authorId   String   @map("author_id") @db.Uuid
+  /// Comment text content
+  content    String   @db.Text
+  /// If true, only visible to staff; if false, visible to creator as well
+  isInternal Boolean  @default(false) @map("is_internal")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  ticket Ticket @relation("TicketComments", fields: [ticketId], references: [id], onDelete: Cascade)
+  author User   @relation("CommentAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([ticketId])
+  @@index([authorId])
+  @@index([createdAt(sort: Desc)])
+  @@index([isInternal])
+  @@map("ticket_comments")
+}
+
+/// UserCreatorAssignment - Many-to-many relationship between staff and creators
+/// Defines which users (chatters, schedulers) work with which creators
+model UserCreatorAssignment {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  creatorId  String   @map("creator_id") @db.Uuid
+  /// If true, this is the primary contact/manager for the creator
+  isPrimary  Boolean  @default(false) @map("is_primary")
+  assignedAt DateTime @default(now()) @map("assigned_at")
+
+  // Relations
+  user    User    @relation("UserAssignments", fields: [userId], references: [id], onDelete: Cascade)
+  creator Creator @relation("CreatorAssignments", fields: [creatorId], references: [id], onDelete: Cascade)
+
+  // Constraints - prevent duplicate assignments
+  @@unique([userId, creatorId])
+  @@index([userId])
+  @@index([creatorId])
+  @@index([isPrimary])
+  @@map("user_creator_assignments")
+}
+
+/// CreatorAvailability - Scheduling data for when creators are available
+/// Supports both recurring weekly patterns and specific date overrides
+model CreatorAvailability {
+  id           String    @id @default(uuid()) @db.Uuid
+  creatorId    String    @map("creator_id") @db.Uuid
+  /// Day of week (0=Sunday, 6=Saturday) - for recurring availability
+  dayOfWeek    Int?      @map("day_of_week") @db.SmallInt
+  /// Start time of availability window
+  startTime    DateTime  @map("start_time") @db.Time(6)
+  /// End time of availability window
+  endTime      DateTime  @map("end_time") @db.Time(6)
+  /// If true, this is a recurring weekly pattern
+  isRecurring  Boolean   @default(false) @map("is_recurring")
+  /// Specific date for one-off availability or blocks
+  specificDate DateTime? @map("specific_date") @db.Date
+  /// If false, this represents a blocked/unavailable time (vacation, etc.)
+  isAvailable  Boolean   @default(true) @map("is_available")
+  /// Optional reason for blocked time (e.g., "Vacation", "Personal")
+  reason       String?
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  creator Creator @relation("CreatorAvailabilitySlots", fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@index([creatorId])
+  @@index([specificDate])
+  @@index([dayOfWeek])
+  @@index([isAvailable])
+  @@index([isRecurring])
+  @@map("creator_availability")
+}
+
+/// Notification - User notifications for ticket updates and system alerts
+model Notification {
+  id        String           @id @default(uuid()) @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  type      NotificationType
+  title     String
+  message   String
+  /// Additional context data (ticket ID, link, etc.)
+  data      Json?
+  isRead    Boolean          @default(false) @map("is_read")
+  readAt    DateTime?        @map("read_at")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([type])
+  @@index([createdAt(sort: Desc)])
+  // Composite for fetching unread notifications for a user
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+/// SystemSetting - Key-value store for system-wide configuration
+/// Used for feature flags, default values, system parameters
+model SystemSetting {
+  id          String   @id @default(uuid()) @db.Uuid
+  /// Unique setting key (e.g., "ticket.auto_assign", "notification.email_enabled")
+  key         String   @unique
+  /// JSON value - supports any data type
+  value       Json
+  /// Human-readable description of the setting
+  description String?
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([key])
+  @@map("system_settings")
+}
+
+/// AuditLog - System-wide audit trail for compliance and debugging
+/// Records all significant actions across the system
+/// Note: This is separate from TicketHistory which is ticket-specific
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  /// Action identifier (e.g., "user.login", "ticket.create", "creator.update")
+  action     String
+  /// Type of entity affected (e.g., "User", "Ticket", "Creator")
+  entityType String?  @map("entity_type")
+  /// ID of the affected entity
+  entityId   String?  @map("entity_id")
+  /// ID of user who performed the action (may be null for system actions)
+  userId     String?  @map("user_id")
+  /// Denormalized email for audit trail even if user is deleted
+  userEmail  String?  @map("user_email")
+  /// Client IP address
+  ipAddress  String?  @map("ip_address")
+  /// Browser/client user agent string
+  userAgent  String?  @map("user_agent")
+  /// Additional details about the action (before/after values, etc.)
+  details    Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([action])
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([userEmail])
+  @@index([createdAt(sort: Desc)])
+  @@map("audit_logs")
+}

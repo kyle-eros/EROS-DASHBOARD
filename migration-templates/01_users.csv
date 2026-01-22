@@ -1,0 +1,7 @@
+email,password,name,role,is_active
+admin@erosagency.com,TempPassword123!,Admin User,SUPER_ADMIN,true
+manager@erosagency.com,TempPassword123!,Manager Name,MANAGER,true
+scheduler@erosagency.com,TempPassword123!,Scheduler Name,SCHEDULER,true
+chatter1@erosagency.com,TempPassword123!,Chatter One,CHATTER,true
+chatter2@erosagency.com,TempPassword123!,Chatter Two,CHATTER,true
+creator1@example.com,TempPassword123!,Creator Stage Name,CREATOR,true

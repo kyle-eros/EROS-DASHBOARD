@@ -1,0 +1,23 @@
+# Tasks
+
+- [x] Ticket System Type Fixes
+    - [x] Fix deadline type mismatch in ticket actions
+    - [x] Fix `getByIdWithDetails` usage in ticket pages
+    - [x] Fix `FormData` type mismatches in form handlers
+    - [x] Fix `DefaultUser` type error in `auth.types.ts`
+    - [x] Fix strict JSON type errors in services
+- [x] Security Audit & Hardening
+    - [x] Audit Server Actions for Input Validation
+    - [x] Audit Authorization Implementation
+    - [x] Audit Data Protection
+    - [x] Audit Client-Side Exposure
+- [x] Project Organization & Documentation
+    - [x] Root Directory Cleanup
+        - [x] Identify clutter files
+        - [x] Create `docs/` folder for guides
+        - [x] Move non-essential root files to appropriate folders
+    - [x] Create Beginner Setup Guide
+        - [x] Write `SETUP_GUIDE.md` (Prerequisites, Install, Env, DB, Run)
+        - [x] Verify instructions are simple and copy-pasteable
+    - [x] Create Maintenance & Security Guide
+        - [x] Write `MAINTENANCE.md` (Updates, Security Checks, Backups)

@@ -1,0 +1,8 @@
+user_email,creator_stage_name,is_primary
+chatter1@erosagency.com,StarPerformer,true
+chatter1@erosagency.com,MoonlightBabe,false
+chatter2@erosagency.com,MoonlightBabe,true
+chatter2@erosagency.com,SunshineQueen,true
+scheduler@erosagency.com,StarPerformer,false
+scheduler@erosagency.com,MoonlightBabe,false
+scheduler@erosagency.com,SunshineQueen,false

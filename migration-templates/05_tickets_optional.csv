@@ -1,0 +1,4 @@
+ticket_number,type,status,priority,title,description,creator_stage_name,created_by_email,assigned_to_email,deadline
+CVR-2025-00001,CUSTOM_VIDEO,SUBMITTED,MEDIUM,Birthday Video for John,Fan wants a 5-min birthday message for their friend,StarPerformer,chatter1@erosagency.com,chatter1@erosagency.com,2025-02-01
+VCS-2025-00001,VIDEO_CALL,ACCEPTED,HIGH,Video Call - Premium Fan,30-minute video call with VIP subscriber,MoonlightBabe,chatter2@erosagency.com,chatter2@erosagency.com,2025-01-25
+URG-2025-00001,URGENT_ALERT,IN_PROGRESS,URGENT,Account Issue - Needs Immediate Response,Platform flagged content - needs creator confirmation,SunshineQueen,manager@erosagency.com,,
