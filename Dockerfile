@@ -42,6 +42,9 @@ RUN adduser --system --uid 1001 nextjs
 RUN apk add --no-cache openssl
 
 COPY --from=builder /app/public ./public
+COPY scripts ./scripts
+
+RUN npm install -g tsx
 
 # Set the correct permission for prerender cache
 RUN mkdir .next
