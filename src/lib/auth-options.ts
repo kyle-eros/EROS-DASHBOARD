@@ -17,6 +17,7 @@
  * 6. Session callback exposes id and role on session.user
  */
 
+import { authConfig } from './auth.config';
 import type { NextAuthConfig, User as NextAuthUser, Session } from 'next-auth';
 import type { JWT } from 'next-auth/jwt';
 import Credentials from 'next-auth/providers/credentials';
@@ -27,14 +28,14 @@ import type { UserRole } from '@prisma/client';
 /**
  * Extended User type that includes role for JWT/Session
  */
-interface ExtendedUser extends NextAuthUser {
+export interface ExtendedUser extends NextAuthUser {
   role: UserRole;
 }
 
 /**
  * Extended JWT type to include user id and role
  */
-interface ExtendedJWT extends JWT {
+export interface ExtendedJWT extends JWT {
   id: string;
   role: UserRole;
 }
@@ -42,7 +43,7 @@ interface ExtendedJWT extends JWT {
 /**
  * Extended Session type to include user id and role
  */
-interface ExtendedSession extends Session {
+export interface ExtendedSession extends Session {
   user: {
     id: string;
     email: string;
@@ -62,30 +63,10 @@ interface CredentialsInput {
 /**
  * NextAuth.js v5 configuration options
  *
- * Key configuration decisions:
- * - JWT strategy: No database sessions, tokens contain user info
- * - 30-day session lifetime: Balance between security and UX
- * - Custom sign-in page: Redirects to /login
- * - Debug mode: Only enabled in development
+ * Extends the edge-compatible authConfig with server-side providers
  */
 export const authOptions: NextAuthConfig = {
-  /**
-   * Session configuration
-   * Using JWT strategy for stateless authentication
-   */
-  session: {
-    strategy: 'jwt',
-    maxAge: 30 * 24 * 60 * 60, // 30 days in seconds
-    updateAge: 24 * 60 * 60, // Update session every 24 hours
-  },
-
-  /**
-   * Custom pages for authentication flow
-   */
-  pages: {
-    signIn: '/login',
-    error: '/login', // Redirect auth errors to login page
-  },
+  ...authConfig,
 
   /**
    * Authentication providers
@@ -178,89 +159,6 @@ export const authOptions: NextAuthConfig = {
   ],
 
   /**
-   * Callbacks for customizing JWT and session behavior
-   */
-  callbacks: {
-    /**
-     * JWT callback - called when JWT is created or updated
-     * Adds user id and role to the token
-     *
-     * @param token - The JWT token
-     * @param user - User object (only present on sign in)
-     * @returns Extended JWT with id and role
-     */
-    async jwt({ token, user }): Promise<ExtendedJWT> {
-      // On initial sign in, add user data to token
-      if (user) {
-        const extendedUser = user as ExtendedUser;
-        token.id = extendedUser.id ?? '';
-        token.role = extendedUser.role;
-      }
-      return token as ExtendedJWT;
-    },
-
-    /**
-     * Session callback - called when session is checked
-     * Exposes user id and role on session.user
-     *
-     * @param session - The session object
-     * @param token - The JWT token
-     * @returns Extended session with user id and role
-     */
-    async session({ session, token }): Promise<ExtendedSession> {
-      const extendedToken = token as ExtendedJWT;
-
-      return {
-        ...session,
-        user: {
-          ...session.user,
-          id: extendedToken.id,
-          role: extendedToken.role,
-        },
-      } as ExtendedSession;
-    },
-
-    /**
-     * Authorized callback - used by middleware for route protection
-     * Determines if user can access a route
-     *
-     * @param auth - Current auth state
-     * @param request - Incoming request
-     * @returns true if authorized, false to redirect to signIn
-     */
-    async authorized({ auth, request: { nextUrl } }): Promise<boolean> {
-      const isLoggedIn = !!auth?.user;
-
-      // Protected route patterns
-      const protectedPatterns = [
-        '/dashboard',
-        '/tickets',
-        '/creators',
-        '/users',
-        '/settings',
-      ];
-
-      // Check if current path matches any protected pattern
-      const isProtectedRoute = protectedPatterns.some((pattern) =>
-        nextUrl.pathname.startsWith(pattern)
-      );
-
-      // Redirect to login if accessing protected route while not logged in
-      if (isProtectedRoute && !isLoggedIn) {
-        return false;
-      }
-
-      // Redirect to dashboard if accessing login while already logged in
-      const isAuthRoute = nextUrl.pathname === '/login' || nextUrl.pathname === '/register';
-      if (isAuthRoute && isLoggedIn) {
-        return Response.redirect(new URL('/dashboard', nextUrl)) as unknown as boolean;
-      }
-
-      return true;
-    },
-  },
-
-  /**
    * Event handlers for logging and side effects
    */
   events: {
@@ -274,16 +172,6 @@ export const authOptions: NextAuthConfig = {
       }
     },
   },
-
-  /**
-   * Enable debug messages in development
-   */
-  debug: process.env.NODE_ENV === 'development',
-
-  /**
-   * Trust host header in production (required for proxies)
-   */
-  trustHost: true,
 };
 
 /**
